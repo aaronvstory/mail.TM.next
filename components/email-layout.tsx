@@ -7,7 +7,8 @@ import {
   Search,
   RefreshCcw,
   ArrowLeft,
-  DownloadCloud,
+  ArrowUpFromLine,
+  ArrowDownToLine,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -404,31 +405,40 @@ ${email.text || email.intro}
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between p-2 border-b">
+      <div className="grid grid-cols-[200px_1fr_auto] gap-4 items-center px-4 py-3 border-b border-border">
         <AccountSwitcher />
-        <div className="flex items-center space-x-2">
-          <div className="relative w-64">
-            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search emails..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 h-8"
-            />
-            {searchQuery && (
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                {filteredEmails.length} results
-              </span>
-            )}
-          </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Search emails..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 h-9"
+          />
+          {searchQuery && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+              {filteredEmails.length} results
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 justify-end">
+          <Button
+            variant="outline"
+            className="h-9"
+            onClick={fetchEmails}
+            disabled={loading}
+          >
+            <RefreshCcw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <DownloadCloud className="h-4 w-4 mr-2" />
+              <Button variant="outline" className="h-9">
+                <ArrowUpFromLine className="h-4 w-4 mr-2" />
                 Export
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent>
+            <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => exportEmails("html")}>
                 Export as HTML
               </DropdownMenuItem>
@@ -443,15 +453,6 @@ ${email.text || email.intro}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchEmails}
-            disabled={loading}
-          >
-            <RefreshCcw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
         </div>
       </div>
       <div className="flex-1 p-2">
@@ -505,26 +506,24 @@ ${email.text || email.intro}
                   {filteredEmails.map((email) => (
                     <Card
                       key={email.id}
-                      className={`email-list-card cursor-pointer hover:bg-muted/50 ${
-                        !email.seen ? "border-l-4 border-l-primary" : ""
+                      className={`cursor-pointer hover:bg-muted/50 transition-colors ${
+                        !email.seen ? "border-l-4 border-l-purple-600" : ""
                       }`}
                       onClick={() => handleEmailClick(email)}
                     >
                       <CardHeader className="p-3">
                         <CardTitle
-                          className={`email-subject ${
-                            !email.seen ? "font-bold" : ""
-                          }`}
+                          className={`${!email.seen ? "font-bold" : ""}`}
                         >
                           {email.subject}
                         </CardTitle>
-                        <p className="email-meta text-muted-foreground">
+                        <p className="text-sm text-muted-foreground">
                           From: {formatSender(email.from)}
                         </p>
                       </CardHeader>
                       <CardContent className="p-3 pt-0">
-                        <p className="email-intro">{email.intro}</p>
-                        <p className="email-meta text-muted-foreground mt-1">
+                        <p className="text-sm">{email.intro}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
                           {new Date(email.createdAt).toLocaleString()}
                         </p>
                       </CardContent>
@@ -539,5 +538,7 @@ ${email.text || email.intro}
     </div>
   );
 });
+
+EmailLayout.displayName = "EmailLayout";
 
 declare module "html2pdf.js";
