@@ -433,7 +433,7 @@ ${email.text || email.intro}
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2 min-w-[220px] justify-end">
+          <div className="flex shrink-0 items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -444,13 +444,13 @@ ${email.text || email.intro}
               <RefreshCcw
                 className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
               />
-              Refresh
+              <span className="flex-none">Refresh</span>
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="h-9 w-[100px]">
                   <ArrowUpFromLine className="h-4 w-4 mr-2" />
-                  Export
+                  <span className="flex-none">Export</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">

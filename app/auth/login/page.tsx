@@ -1,12 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { AuthForm } from "@/components/auth/auth-form";
 import { Logo } from "@/components/logo";
-
-export const metadata = {
-  title: "Login - Temporary Email",
-  description: "Access your temporary email account",
-};
 
 export default function LoginPage() {
   return (

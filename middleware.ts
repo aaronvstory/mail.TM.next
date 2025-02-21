@@ -13,13 +13,18 @@ export function middleware(request: NextRequest) {
   }
 
   // Redirect authenticated users away from auth pages
-  if ((path === "/auth/login" || path === "/auth/register") && token) {
+  if (path.startsWith("/auth/") && token) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  // Redirect root to login
+  if (path === "/") {
+    return NextResponse.redirect(new URL("/auth/login", request.url));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/auth/login", "/auth/register"],
+  matcher: ["/", "/dashboard/:path*", "/auth/:path*"],
 };
