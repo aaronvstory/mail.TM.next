@@ -4,9 +4,11 @@ import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Inbox,
-  Search,
+  Send,
+  Trash2,
   RefreshCcw,
   ArrowLeft,
+  Search,
   DownloadCloud,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,8 +22,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { AccountSwitcher } from "./account-switcher";
 import { getMessage } from "@/lib/mail-tm/client";
+import AccountSwitcher from "./account-switcher";
 import { toast } from "sonner";
 
 interface Email {
@@ -30,11 +32,14 @@ interface Email {
     address: string;
     name?: string;
   };
-  to: Array<{ address: string; name?: string }>;
+  to: Array<{
+    address: string;
+    name?: string;
+  }>;
   subject: string;
   intro: string;
-  text: string;
-  html: string;
+  text?: string;
+  html?: string;
   createdAt: string;
   seen: boolean;
 }
@@ -43,22 +48,37 @@ export interface EmailLayoutHandle {
   fetchEmails: () => Promise<void>;
 }
 
-export const EmailLayout = forwardRef<EmailLayoutHandle>((props, ref) => {
+const formatSender = (from: { address: string; name?: string }) => {
+  if (from.name && from.name !== from.address) {
+    return `${from.name} <${from.address}>`;
+  }
+  return from.address;
+};
+
+export const EmailLayout = forwardRef<EmailLayoutHandle, {}>((props, ref) => {
   const [currentEmail, setCurrentEmail] = useState<Email | null>(null);
   const [emails, setEmails] = useState<Email[]>([]);
-  const [filteredEmails, setFilteredEmails] = useState<Email[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [fullEmailContents, setFullEmailContents] = useState<
-    Record<string, { text: string; html: string }>
-  >({});
+  const [filteredEmails, setFilteredEmails] = useState<Email[]>([]);
+  const [currentAccount, setCurrentAccount] = useState<string | null>(null);
 
-  const formatSender = (from: { address: string; name?: string }) => {
-    if (from.name && from.name !== from.address) {
-      return `${from.name} <${from.address}>`;
+  useEffect(() => {
+    // Get current account from cookie
+    const accountCookie = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("mail_tm_account="));
+    if (accountCookie) {
+      try {
+        const accountData = JSON.parse(
+          decodeURIComponent(accountCookie.split("=")[1])
+        );
+        setCurrentAccount(accountData.email);
+      } catch (e) {
+        console.error("Error parsing account data:", e);
+      }
     }
-    return from.address;
-  };
+  }, []);
 
   const fetchEmails = async () => {
     setLoading(true);
@@ -85,110 +105,11 @@ export const EmailLayout = forwardRef<EmailLayoutHandle>((props, ref) => {
       const data = await response.json();
       const fetchedEmails = data["hydra:member"];
       setEmails(fetchedEmails);
-
-      // Pre-fetch full content for search
-      const contents: Record<string, { text: string; html: string }> = {};
-      for (const email of fetchedEmails) {
-        try {
-          const fullEmail = await getMessage(email.id);
-          contents[email.id] = {
-            text: fullEmail.text || "",
-            html: fullEmail.html || "",
-          };
-        } catch (error) {
-          console.error(
-            `Failed to fetch content for email ${email.id}:`,
-            error
-          );
-        }
-      }
-      setFullEmailContents(contents);
-
-      filterEmails(fetchedEmails, searchQuery, contents);
+      filterEmails(fetchedEmails, searchQuery);
     } catch (error) {
       console.error("Failed to fetch emails:", error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const stripHtml = (html: string) => {
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    return doc.body.textContent || "";
-  };
-
-  const filterEmails = (
-    emailsToFilter: Email[],
-    query: string,
-    contents: Record<string, { text: string; html: string }> = fullEmailContents
-  ) => {
-    if (!query.trim()) {
-      setFilteredEmails(emailsToFilter);
-      return;
-    }
-
-    const lowercaseQuery = query.toLowerCase();
-    const filtered = emailsToFilter.filter((email) => {
-      const emailContent = contents[email.id];
-      const fullText = [
-        email.subject,
-        email.intro,
-        emailContent?.text || "",
-        stripHtml(emailContent?.html || ""),
-        email.from.address,
-        email.from.name || "",
-        ...email.to.map((to) => `${to.name || ""} ${to.address}`),
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return fullText.includes(lowercaseQuery);
-    });
-
-    setFilteredEmails(filtered);
-  };
-
-  useEffect(() => {
-    filterEmails(emails, searchQuery);
-  }, [searchQuery, emails]);
-
-  const markAsRead = async (id: string) => {
-    try {
-      const token = document.cookie
-        .split("; ")
-        .find((row) => row.startsWith("mail_tm_token="))
-        ?.split("=")[1];
-      if (!token) return;
-
-      await fetch(`https://api.mail.tm/messages/${id}`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/merge-patch+json",
-        },
-        body: JSON.stringify({ seen: true }),
-      });
-    } catch (error) {
-      console.error("Failed to mark email as read:", error);
-    }
-  };
-
-  const fetchEmailContent = async (id: string) => {
-    try {
-      const fullEmail = await getMessage(id);
-      setCurrentEmail(fullEmail);
-      markAsRead(id);
-
-      // Update full content cache
-      setFullEmailContents((prev) => ({
-        ...prev,
-        [id]: {
-          text: fullEmail.text || "",
-          html: fullEmail.html || "",
-        },
-      }));
-    } catch (error) {
-      console.error("Failed to fetch email content:", error);
     }
   };
 
@@ -198,180 +119,63 @@ export const EmailLayout = forwardRef<EmailLayoutHandle>((props, ref) => {
 
   useEffect(() => {
     fetchEmails();
-    // Set up auto-refresh every 30 seconds
     const interval = setInterval(fetchEmails, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  const handleEmailClick = (email: Email) => {
-    fetchEmailContent(email.id);
-  };
-
-  const exportEmails = async (format: "html" | "json" | "pdf" | "markdown") => {
+  const handleEmailClick = async (email: Email) => {
     try {
-      const emailsToExport =
-        filteredEmails.length > 0 ? filteredEmails : emails;
-      let content = "";
-      let mimeType = "";
-      let fileExtension = "";
-
-      switch (format) {
-        case "html":
-          content = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Exported Emails</title>
-  <style>
-    body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-    .email { border: 1px solid #ddd; margin: 20px 0; padding: 20px; border-radius: 8px; }
-    .subject { font-size: 1.2em; font-weight: bold; }
-    .meta { color: #666; margin: 10px 0; }
-    .content { margin-top: 20px; }
-  </style>
-</head>
-<body>
-  ${emailsToExport
-    .map(
-      (email) => `
-    <div class="email">
-      <div class="subject">${email.subject}</div>
-      <div class="meta">
-        <div>From: ${formatSender(email.from)}</div>
-        <div>To: ${email.to.map((to) => formatSender(to)).join(", ")}</div>
-        <div>Date: ${new Date(email.createdAt).toLocaleString()}</div>
-      </div>
-      <div class="content">
-        ${email.html || email.text || email.intro}
-      </div>
-    </div>
-  `
-    )
-    .join("\n")}
-</body>
-</html>`;
-          mimeType = "text/html";
-          fileExtension = "html";
-          break;
-
-        case "json":
-          content = JSON.stringify(emailsToExport, null, 2);
-          mimeType = "application/json";
-          fileExtension = "json";
-          break;
-
-        case "markdown":
-          content = emailsToExport
-            .map(
-              (email) => `
-# ${email.subject}
-
-**From:** ${formatSender(email.from)}
-**To:** ${email.to.map((to) => formatSender(to)).join(", ")}
-**Date:** ${new Date(email.createdAt).toLocaleString()}
-
----
-
-${email.text || email.intro}
-
----
-`
-            )
-            .join("\n\n");
-          mimeType = "text/markdown";
-          fileExtension = "md";
-          break;
-
-        case "pdf":
-          // For PDF, we'll use the HTML version and convert it client-side
-          const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Exported Emails</title>
-  <style>
-    body { font-family: system-ui, -apple-system, sans-serif; }
-    .email { border: 1px solid #ddd; margin: 20px 0; padding: 20px; }
-    .subject { font-size: 1.2em; font-weight: bold; }
-    .meta { color: #666; margin: 10px 0; }
-    .content { margin-top: 20px; }
-  </style>
-</head>
-<body>
-  ${emailsToExport
-    .map(
-      (email) => `
-    <div class="email">
-      <div class="subject">${email.subject}</div>
-      <div class="meta">
-        <div>From: ${formatSender(email.from)}</div>
-        <div>To: ${email.to.map((to) => formatSender(to)).join(", ")}</div>
-        <div>Date: ${new Date(email.createdAt).toLocaleString()}</div>
-      </div>
-      <div class="content">
-        ${email.html || email.text || email.intro}
-      </div>
-    </div>
-  `
-    )
-    .join("\n")}
-</body>
-</html>`;
-
-          const { default: html2pdf } = await import("html2pdf.js");
-          const element = document.createElement("div");
-          element.innerHTML = htmlContent;
-          document.body.appendChild(element);
-
-          await html2pdf()
-            .from(element)
-            .save(`exported_emails_${new Date().toISOString()}.pdf`);
-          document.body.removeChild(element);
-          return;
-      }
-
-      // Generate filename with timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const filename = `emails_${timestamp}.${fileExtension}`;
-
-      // Create and download the file
-      const blob = new Blob([content], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      toast.success(`Emails exported as ${format.toUpperCase()}`);
+      const fullEmail = await getMessage(email.id);
+      setCurrentEmail(fullEmail);
     } catch (error) {
-      console.error("Error exporting emails:", error);
-      toast.error("Failed to export emails");
+      console.error("Failed to fetch email content:", error);
     }
   };
 
+  const filterEmails = (emailsToFilter: Email[], query: string) => {
+    if (!query.trim()) {
+      setFilteredEmails(emailsToFilter);
+      return;
+    }
+
+    const lowercaseQuery = query.toLowerCase();
+    const filtered = emailsToFilter.filter((email) => {
+      const searchableText = [
+        email.subject,
+        email.intro,
+        formatSender(email.from),
+        ...email.to.map(formatSender),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(lowercaseQuery);
+    });
+
+    setFilteredEmails(filtered);
+  };
+
+  useEffect(() => {
+    filterEmails(emails, searchQuery);
+  }, [searchQuery, emails]);
+
   if (currentEmail) {
     return (
-      <div className="flex-1 p-4">
+      <div className="flex-1 p-6">
         <Button
           variant="ghost"
-          size="sm"
-          className="mb-2"
+          className="mb-4"
           onClick={() => setCurrentEmail(null)}
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Inbox
         </Button>
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div>
-            <h1 className="text-xl font-bold">{currentEmail.subject}</h1>
-            <div className="mt-1 space-y-0.5 text-sm text-muted-foreground">
+            <h1 className="text-2xl font-bold">{currentEmail.subject}</h1>
+            <div className="mt-2 space-y-1 text-sm text-muted-foreground">
               <p>From: {formatSender(currentEmail.from)}</p>
-              <p>
-                To: {currentEmail.to.map((to) => formatSender(to)).join(", ")}
-              </p>
+              <p>To: {currentEmail.to.map(formatSender).join(", ")}</p>
               <p>
                 {new Date(currentEmail.createdAt).toLocaleString(undefined, {
                   dateStyle: "full",
@@ -381,7 +185,7 @@ ${email.text || email.intro}
             </div>
           </div>
           <Separator />
-          <div className="prose prose-sm dark:prose-invert max-w-none email-content">
+          <div className="prose prose-sm dark:prose-invert max-w-none">
             {currentEmail.html ? (
               <div
                 dangerouslySetInnerHTML={{ __html: currentEmail.html }}
@@ -389,7 +193,7 @@ ${email.text || email.intro}
               />
             ) : (
               <pre className="whitespace-pre-wrap font-sans">
-                {currentEmail.text}
+                {currentEmail.text || currentEmail.intro}
               </pre>
             )}
           </div>
@@ -400,10 +204,13 @@ ${email.text || email.intro}
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between p-2 border-b">
-        <AccountSwitcher />
+      <div className="flex items-center justify-between p-4 border-b">
+        <AccountSwitcher
+          accounts={[{ label: "Current Account", email: currentAccount || "" }]}
+          currentEmail={currentAccount}
+        />
         <div className="flex items-center space-x-2">
-          <div className="relative w-64">
+          <div className="relative">
             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search emails..."
@@ -417,28 +224,6 @@ ${email.text || email.intro}
               </span>
             )}
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <DownloadCloud className="h-4 w-4 mr-2" />
-                Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => exportEmails("html")}>
-                Export as HTML
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportEmails("json")}>
-                Export as JSON
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportEmails("pdf")}>
-                Export as PDF
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportEmails("markdown")}>
-                Export as Markdown
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
           <Button
             variant="outline"
             size="sm"
@@ -450,77 +235,75 @@ ${email.text || email.intro}
           </Button>
         </div>
       </div>
-      <div className="flex-1 p-2">
+
+      <div className="flex-1 p-4">
         <Tabs defaultValue="inbox" className="h-full">
-          <TabsList className="w-[200px]">
-            <TabsTrigger value="inbox" className="w-full">
-              <Inbox className="h-3 w-3 mr-1" />
+          <TabsList>
+            <TabsTrigger value="inbox">
+              <Inbox className="h-4 w-4 mr-2" />
               Inbox
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="inbox" className="h-[calc(100%-40px)]">
+          <TabsContent value="inbox" className="mt-4">
             {loading ? (
-              <div className="flex items-center justify-center h-full">
-                <p className="text-sm">Loading emails...</p>
+              <div className="flex items-center justify-center h-[400px]">
+                <p className="text-sm text-muted-foreground">
+                  Loading emails...
+                </p>
               </div>
-            ) : filteredEmails.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                {searchQuery ? (
-                  <>
-                    <h3 className="text-base font-semibold mb-1">
-                      No matching emails
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Try different search terms
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <h3 className="text-base font-semibold mb-1">
-                      No emails yet
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Your temporary email is ready to receive messages
-                    </p>
-                  </>
-                )}
+            ) : filteredEmails.length === 0 && searchQuery ? (
+              <div className="flex flex-col items-center justify-center h-[400px] text-center">
+                <h3 className="text-base font-semibold mb-1">
+                  No matching emails
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Try different search terms
+                </p>
+              </div>
+            ) : emails.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-[400px] text-center">
+                <h3 className="text-base font-semibold mb-1">No emails yet</h3>
+                <p className="text-sm text-muted-foreground">
+                  Your inbox is empty. Emails will appear here when you receive
+                  them.
+                </p>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="mt-3"
                   onClick={fetchEmails}
+                  className="mt-4"
                 >
-                  <RefreshCcw className="h-3 w-3 mr-1" />
+                  <RefreshCcw className="h-4 w-4 mr-2" />
                   Check for new emails
                 </Button>
               </div>
             ) : (
-              <ScrollArea className="h-full pr-4">
-                <div className="space-y-2">
-                  {filteredEmails.map((email) => (
+              <ScrollArea className="h-[calc(100vh-220px)]">
+                <div className="space-y-4">
+                  {(searchQuery ? filteredEmails : emails).map((email) => (
                     <Card
                       key={email.id}
-                      className={`email-list-card cursor-pointer hover:bg-muted/50 ${
+                      className={`cursor-pointer hover:bg-muted/50 ${
                         !email.seen ? "border-l-4 border-l-primary" : ""
                       }`}
                       onClick={() => handleEmailClick(email)}
                     >
-                      <CardHeader className="p-3">
+                      <CardHeader>
                         <CardTitle
-                          className={`email-subject ${
+                          className={`text-base ${
                             !email.seen ? "font-bold" : ""
                           }`}
                         >
                           {email.subject}
                         </CardTitle>
-                        <p className="email-meta text-muted-foreground">
+                        <p className="text-sm text-muted-foreground">
                           From: {formatSender(email.from)}
                         </p>
                       </CardHeader>
-                      <CardContent className="p-3 pt-0">
-                        <p className="email-intro">{email.intro}</p>
-                        <p className="email-meta text-muted-foreground mt-1">
+                      <CardContent>
+                        <p className="text-sm">{email.intro}</p>
+                        <p className="text-xs text-muted-foreground mt-2">
                           {new Date(email.createdAt).toLocaleString()}
                         </p>
                       </CardContent>

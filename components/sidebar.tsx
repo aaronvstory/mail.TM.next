@@ -4,6 +4,7 @@ import { Mail, RefreshCcw, LogOut, Download, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
 import { logout } from "@/lib/mail-tm/client";
+import { supabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { Separator } from "@/components/ui/separator";
@@ -30,13 +31,22 @@ export function Sidebar({ onRefresh }: { onRefresh?: () => void }) {
   }, []);
 
   const handleLogout = async () => {
-    await logout();
-    document.cookie =
-      "mail_tm_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    document.cookie =
-      "mail_tm_account=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    toast.success("Logged out successfully");
-    router.push("/auth/login");
+    try {
+      // Clear Mail.tm cookies
+      document.cookie =
+        "mail_tm_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT";
+      document.cookie =
+        "mail_tm_account=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT";
+
+      // Sign out from Supabase
+      await supabase.auth.signOut();
+
+      toast.success("Logged out successfully");
+      router.push("/auth/login");
+    } catch (error) {
+      console.error("Error logging out:", error);
+      toast.error("Failed to log out");
+    }
   };
 
   const handleExportAccounts = () => {

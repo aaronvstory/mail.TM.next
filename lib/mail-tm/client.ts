@@ -44,7 +44,7 @@ export interface MailTmError {
   "hydra:description"?: string;
 }
 
-function getAuthHeaders() {
+function getAuthHeaders(): Record<string, string> {
   const token =
     typeof window !== "undefined"
       ? document.cookie
@@ -52,14 +52,13 @@ function getAuthHeaders() {
           .find((row) => row.startsWith("mail_tm_token="))
           ?.split("=")[1]
       : null;
-  return token
-    ? {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      }
-    : {
-        "Content-Type": "application/json",
-      };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json"
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
 }
 
 export async function checkAuth(): Promise<boolean> {
@@ -79,7 +78,8 @@ export async function getAvailableDomains(): Promise<Domain[]> {
   });
 
   if (!response.ok) {
-    throw new Error("Failed to fetch domains");
+    const error = await response.json();
+    throw new Error(error["hydra:description"] || "Failed to fetch domains");
   }
 
   const data = await response.json();
@@ -100,26 +100,67 @@ export async function createMailTmAccount(
     }),
   });
 
+  const data = await response.json();
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error["hydra:description"] || "Failed to create account");
+    const errorMessage = data["hydra:description"] || data.message;
+    if (errorMessage?.includes("already exists")) {
+      throw new Error(
+        "This username is already taken. Please try another one."
+      );
+    }
+    throw new Error(errorMessage || "Failed to create account");
   }
 
-  return response.json();
+  return data;
 }
 
 export async function loginMailTm(address: string, password: string) {
-  const response = await fetch(`${MAIL_TM_API}/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, password }),
-  });
+  try {
+    const fullAddress = address.includes("@") ? address : `${address}@mail.tm`;
+    const response = await fetch(`${MAIL_TM_API}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: fullAddress, password }),
+    });
 
-  if (!response.ok) {
-    throw new Error("Invalid email or password");
+    const data = await response.json();
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error(
+          "Invalid email or password. Please check your credentials."
+        );
+      }
+      throw new Error(
+        data["hydra:description"] || data.message || "Failed to login"
+      );
+    }
+
+    // Get account details after successful login
+    const accountResponse = await fetch(`${MAIL_TM_API}/me`, {
+      headers: {
+        Authorization: `Bearer ${data.token}`,
+        "Content-Type": "application/json",
+      },
+    });
+    const accountData = await accountResponse.json();
+
+    if (typeof window !== "undefined") {
+      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString();
+      document.cookie = `mail_tm_token=${data.token}; path=/; expires=${expires}`;
+      document.cookie = `mail_tm_account=${JSON.stringify({
+        id: accountData.id,
+        email: fullAddress,
+      })}; path=/; expires=${expires}`;
+    }
+
+    return {
+      ...data,
+      account: accountData,
+    };
+  } catch (error) {
+    console.error("Login error:", error);
+    throw error;
   }
-
-  return response.json();
 }
 
 export async function logout() {
