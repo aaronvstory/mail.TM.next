@@ -7,12 +7,12 @@ export function Logo() {
     <div className="flex items-center space-x-2">
       <Image
         src="/icon.svg"
-        alt="Logo"
+        alt="KoxMail"
         width={32}
         height={32}
         className="dark:invert"
       />
-      <span className="font-bold">TempMail</span>
+      <span className="font-bold">KoxMail</span>
     </div>
   );
 }
