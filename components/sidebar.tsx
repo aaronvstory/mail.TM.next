@@ -127,17 +127,6 @@ export function Sidebar({ onRefresh }: { onRefresh?: () => void }) {
         <Button
           variant="outline"
           className="w-full justify-start"
-          onClick={() => {
-            onRefresh?.();
-            toast.success("Refreshing emails");
-          }}
-        >
-          <RefreshCcw className="mr-2 h-4 w-4" />
-          Refresh
-        </Button>
-        <Button
-          variant="outline"
-          className="w-full justify-start"
           onClick={handleExportAccounts}
         >
           <Download className="mr-2 h-4 w-4" />

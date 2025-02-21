@@ -176,7 +176,7 @@ export const EmailLayout = forwardRef<EmailLayoutHandle>((props, ref) => {
   const fetchEmailContent = async (id: string) => {
     try {
       const fullEmail = await getMessage(id);
-      setCurrentEmail(fullEmail);
+      setCurrentEmail({ ...fullEmail, text: fullEmail.text || "", html: fullEmail.html || "" });
       markAsRead(id);
 
       // Update full content cache
@@ -535,3 +535,5 @@ ${email.text || email.intro}
     </div>
   );
 });
+
+declare module "html2pdf.js";
