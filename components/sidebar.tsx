@@ -1,6 +1,12 @@
 "use client";
 
-import { Mail, LogOut, ArrowUpFromLine, ArrowDownToLine } from "lucide-react";
+import {
+  Mail,
+  RefreshCcw,
+  LogOut,
+  ArrowUpFromLine,
+  ArrowDownToLine,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
 import { logout } from "@/lib/mail-tm/client";
@@ -11,72 +17,61 @@ import { Separator } from "@/components/ui/separator";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+interface Account {
+  email: string;
+  token: string;
+  password?: string;
+}
+
 export function Sidebar({ onRefresh }: { onRefresh?: () => void }) {
   const router = useRouter();
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [currentAccount, setCurrentAccount] = useState<any>(null);
+  const [mounted, setMounted] = useState(false);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [currentAccount, setCurrentAccount] = useState<Account | null>(null);
 
   useEffect(() => {
-    const accountsCookie = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("mail_tm_accounts="));
-    if (accountsCookie) {
+    setMounted(true);
+    const loadAccounts = () => {
+      if (typeof window === "undefined") return;
       try {
-        const accountsData = JSON.parse(
-          decodeURIComponent(accountsCookie.split("=")[1])
-        );
-        setAccounts(accountsData);
-      } catch (e) {
-        console.error("Error parsing accounts:", e);
-      }
-    }
+        const accountsCookie = document.cookie
+          .split("; ")
+          .find((row) => row.startsWith("mail_tm_accounts="));
+        if (accountsCookie) {
+          const accountsData = JSON.parse(
+            decodeURIComponent(accountsCookie.split("=")[1])
+          );
+          setAccounts(accountsData);
+        }
 
-    const currentAccountCookie = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("mail_tm_account="));
-    if (currentAccountCookie) {
-      try {
-        const accountData = JSON.parse(
-          decodeURIComponent(currentAccountCookie.split("=")[1])
-        );
-        setCurrentAccount(accountData);
+        const currentAccountCookie = document.cookie
+          .split("; ")
+          .find((row) => row.startsWith("mail_tm_account="));
+        if (currentAccountCookie) {
+          const accountData = JSON.parse(
+            decodeURIComponent(currentAccountCookie.split("=")[1])
+          );
+          setCurrentAccount(accountData);
+        }
       } catch (e) {
-        console.error("Error parsing current account:", e);
+        console.error("Error loading accounts:", e);
       }
-    }
+    };
+
+    loadAccounts();
   }, []);
 
-  const handleAccountSwitch = (accountEmail: string) => {
-    const selectedAccount = accounts.find((acc) => acc.email === accountEmail);
-    if (selectedAccount) {
-      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toUTCString();
-      document.cookie = `mail_tm_account=${JSON.stringify(
-        selectedAccount
-      )}; path=/; expires=${expires}; SameSite=Strict; Secure`;
-      document.cookie = `mail_tm_token=${selectedAccount.token}; path=/; expires=${expires}; SameSite=Strict; Secure`;
-      window.location.reload();
-    }
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    document.cookie =
-      "mail_tm_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    document.cookie =
-      "mail_tm_account=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    toast.success("Logged out successfully");
-    router.push("/auth/login");
-  };
-
   const handleExportAccounts = () => {
-    const accounts = document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("mail_tm_accounts="));
-    if (accounts) {
+    try {
+      if (!accounts.length) {
+        toast.error("No accounts to export");
+        return;
+      }
+
       const now = new Date();
       const dateStr = now.toISOString().replace(/[:.]/g, "-").slice(0, 19);
       const fileName = `mail-tm-accounts_${dateStr}.json`;
-      const accountsData = decodeURIComponent(accounts.split("=")[1]);
+      const accountsData = JSON.stringify(accounts, null, 2);
       const blob = new Blob([accountsData], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -87,8 +82,9 @@ export function Sidebar({ onRefresh }: { onRefresh?: () => void }) {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       toast.success("Accounts exported successfully");
-    } else {
-      toast.error("No accounts to export");
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export accounts");
     }
   };
 
@@ -101,23 +97,44 @@ export function Sidebar({ onRefresh }: { onRefresh?: () => void }) {
       if (file) {
         try {
           const text = await file.text();
-          const accounts = JSON.parse(text);
+          const importedAccounts = JSON.parse(text);
+          if (!Array.isArray(importedAccounts)) {
+            throw new Error("Invalid accounts format");
+          }
+
           const expires = new Date(
             Date.now() + 24 * 60 * 60 * 1000
           ).toUTCString();
           document.cookie = `mail_tm_accounts=${JSON.stringify(
-            accounts
+            importedAccounts
           )}; path=/; expires=${expires}; SameSite=Strict; Secure`;
           toast.success("Accounts imported successfully");
           window.location.reload();
-        } catch (e) {
+        } catch (error) {
+          console.error("Import error:", error);
           toast.error("Failed to import accounts");
-          console.error("Import error:", e);
         }
       }
     };
     input.click();
   };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      document.cookie =
+        "mail_tm_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      document.cookie =
+        "mail_tm_account=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+      toast.success("Logged out successfully");
+      router.push("/auth/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast.error("Failed to logout");
+    }
+  };
+
+  if (!mounted) return null;
 
   return (
     <div className="flex flex-col h-full w-[240px] border-r bg-muted/10">
@@ -140,10 +157,19 @@ export function Sidebar({ onRefresh }: { onRefresh?: () => void }) {
                     : "ghost"
                 }
                 className="w-full justify-start font-normal"
-                onClick={() => handleAccountSwitch(account.email)}
+                onClick={() => {
+                  const expires = new Date(
+                    Date.now() + 24 * 60 * 60 * 1000
+                  ).toUTCString();
+                  document.cookie = `mail_tm_account=${JSON.stringify(
+                    account
+                  )}; path=/; expires=${expires}; SameSite=Strict; Secure`;
+                  document.cookie = `mail_tm_token=${account.token}; path=/; expires=${expires}; SameSite=Strict; Secure`;
+                  window.location.reload();
+                }}
               >
                 <Mail className="mr-2 h-4 w-4" />
-                {account.email}
+                <span className="truncate">{account.email}</span>
               </Button>
             ))}
             <Link href="/auth/register" className="block mt-2">

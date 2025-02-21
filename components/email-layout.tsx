@@ -45,6 +45,7 @@ export interface EmailLayoutHandle {
 }
 
 export const EmailLayout = forwardRef<EmailLayoutHandle>((props, ref) => {
+  const [isClient, setIsClient] = useState(false);
   const [currentEmail, setCurrentEmail] = useState<Email | null>(null);
   const [emails, setEmails] = useState<Email[]>([]);
   const [filteredEmails, setFilteredEmails] = useState<Email[]>([]);
@@ -53,6 +54,10 @@ export const EmailLayout = forwardRef<EmailLayoutHandle>((props, ref) => {
   const [fullEmailContents, setFullEmailContents] = useState<
     Record<string, { text: string; html: string }>
   >({});
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const formatSender = (from: { address: string; name?: string }) => {
     if (from.name && from.name !== from.address) {
@@ -357,6 +362,10 @@ ${email.text || email.intro}
     }
   };
 
+  if (!isClient) {
+    return null;
+  }
+
   if (currentEmail) {
     return (
       <div className="flex-1 p-4">
@@ -405,54 +414,73 @@ ${email.text || email.intro}
 
   return (
     <div className="flex h-full flex-col">
-      <div className="grid grid-cols-[200px_1fr_auto] gap-4 items-center px-4 py-3 border-b border-border">
-        <AccountSwitcher />
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <Input
-            placeholder="Search emails..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 h-9"
-          />
-          {searchQuery && (
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-              {filteredEmails.length} results
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 justify-end">
-          <Button
-            variant="outline"
-            className="h-9"
-            onClick={fetchEmails}
-            disabled={loading}
-          >
-            <RefreshCcw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-9">
-                <ArrowUpFromLine className="h-4 w-4 mr-2" />
-                Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => exportEmails("html")}>
-                Export as HTML
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportEmails("json")}>
-                Export as JSON
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportEmails("pdf")}>
-                Export as PDF
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportEmails("markdown")}>
-                Export as Markdown
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+      <div className="w-full border-b border-border">
+        <div className="px-4 py-2 flex items-center justify-between max-w-[1400px] mx-auto w-full gap-4">
+          <AccountSwitcher />
+          <div className="flex-1 max-w-xl">
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Search emails..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 h-9"
+              />
+              {searchQuery && (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  {filteredEmails.length} results
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 min-w-[220px] justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 w-[100px]"
+              onClick={fetchEmails}
+              disabled={loading}
+            >
+              <RefreshCcw
+                className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
+              />
+              Refresh
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 w-[100px]">
+                  <ArrowUpFromLine className="h-4 w-4 mr-2" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => exportEmails("html")}
+                  className="cursor-pointer"
+                >
+                  Export as HTML
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => exportEmails("json")}
+                  className="cursor-pointer"
+                >
+                  Export as JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => exportEmails("pdf")}
+                  className="cursor-pointer"
+                >
+                  Export as PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => exportEmails("markdown")}
+                  className="cursor-pointer"
+                >
+                  Export as Markdown
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
       <div className="flex-1 p-2">
@@ -467,7 +495,9 @@ ${email.text || email.intro}
           <TabsContent value="inbox" className="h-[calc(100%-40px)]">
             {loading ? (
               <div className="flex items-center justify-center h-full">
-                <p className="text-sm">Loading emails...</p>
+                <p className="text-sm text-muted-foreground">
+                  Loading emails...
+                </p>
               </div>
             ) : filteredEmails.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
@@ -493,10 +523,13 @@ ${email.text || email.intro}
                 <Button
                   variant="outline"
                   size="sm"
-                  className="mt-3"
+                  className="mt-3 min-w-[140px]"
                   onClick={fetchEmails}
+                  disabled={loading}
                 >
-                  <RefreshCcw className="h-3 w-3 mr-1" />
+                  <RefreshCcw
+                    className={`h-3 w-3 mr-1 ${loading ? "animate-spin" : ""}`}
+                  />
                   Check for new emails
                 </Button>
               </div>
@@ -506,14 +539,19 @@ ${email.text || email.intro}
                   {filteredEmails.map((email) => (
                     <Card
                       key={email.id}
-                      className={`cursor-pointer hover:bg-muted/50 transition-colors ${
+                      className={`cursor-pointer hover:bg-muted/50 transition-colors relative overflow-hidden ${
                         !email.seen ? "border-l-4 border-l-purple-600" : ""
                       }`}
                       onClick={() => handleEmailClick(email)}
                     >
+                      {!email.seen && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-purple-600" />
+                      )}
                       <CardHeader className="p-3">
                         <CardTitle
-                          className={`${!email.seen ? "font-bold" : ""}`}
+                          className={`text-base ${
+                            !email.seen ? "font-bold" : "font-medium"
+                          }`}
                         >
                           {email.subject}
                         </CardTitle>
@@ -522,7 +560,9 @@ ${email.text || email.intro}
                         </p>
                       </CardHeader>
                       <CardContent className="p-3 pt-0">
-                        <p className="text-sm">{email.intro}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {email.intro}
+                        </p>
                         <p className="text-xs text-muted-foreground mt-1">
                           {new Date(email.createdAt).toLocaleString()}
                         </p>
