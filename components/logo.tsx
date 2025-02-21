@@ -6,7 +6,7 @@ export function Logo() {
   return (
     <div className="flex items-center space-x-2">
       <Image
-        src="/placeholder-logo.svg"
+        src="/placeholder-logo.png"
         alt="KoxMail"
         width={32}
         height={32}

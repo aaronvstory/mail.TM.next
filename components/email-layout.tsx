@@ -176,7 +176,11 @@ export const EmailLayout = forwardRef<EmailLayoutHandle>((props, ref) => {
   const fetchEmailContent = async (id: string) => {
     try {
       const fullEmail = await getMessage(id);
-      setCurrentEmail({ ...fullEmail, text: fullEmail.text || "", html: fullEmail.html || "" });
+      setCurrentEmail({
+        ...fullEmail,
+        text: fullEmail.text || "",
+        html: fullEmail.html || "",
+      });
       markAsRead(id);
 
       // Update full content cache
